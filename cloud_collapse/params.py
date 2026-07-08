@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tomllib
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -97,6 +99,18 @@ class RunParams:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @classmethod
+    def from_toml(cls, path: str | Path) -> RunParams:
+        """Load a run config from a TOML file -- only fields present override defaults.
+
+        See configs/example.toml for a fully-commented template covering every field.
+        """
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        if "omega" in data:
+            data["omega"] = tuple(data["omega"])
+        return cls(**data)
 
 
 def prompt_run_params() -> RunParams:

@@ -41,6 +41,7 @@ def main(
     fps: int = 30,
     interactive_view: bool = False,
     show_diagnostics: bool = False,
+    config: str | None = None,
 ) -> None:
     """Run simulate.py's physics, then visualize.py's renderer, back to back.
 
@@ -52,6 +53,8 @@ def main(
 
     Parameters
     ----------
+    config: Path to a TOML run config (see configs/example.toml). When given, it's used
+        exclusively -- all other physics flags below are ignored (only `out` still applies).
     n_particles: Particle count (1..50000).
     restitution: Collision restitution for the normal velocity component (0..1).
     v_min_normal: Below this relative normal speed, collisions are perfectly elastic.
@@ -85,7 +88,9 @@ def main(
     interactive_view: Open a live PyVista window instead of exporting a movie.
     show_diagnostics: Also plot energy/angular-momentum diagnostics once rendering finishes.
     """
-    if interactive_params:
+    if config is not None:
+        params = RunParams.from_toml(config)
+    elif interactive_params:
         params = prompt_run_params()
     else:
         params = RunParams(

@@ -1,0 +1,43 @@
+# Example cloud-collapse run config. Copy this file, adjust what you care about,
+# and pass it as --config path/to/your.toml to src/simulate.py or src/run.py --
+# any field you omit falls back to its RunParams default (see cloud_collapse/params.py).
+#
+# When --config is given, it's used exclusively: individual CLI flags are ignored.
+
+# --- Required (no default) ---
+n_particles = 5000
+restitution = 0.8       # collision restitution, normal component (0..1)
+v_min_normal = 0.01     # below this relative normal speed, collisions are forced elastic
+n_steps = 300000
+
+# --- Collisions / accretion ---
+stick_velocity = 0.05   # below this relative normal approach speed, particles merge instead
+                        # of bouncing (independent of v_min_normal, which only affects bounces)
+particle_radius = 0.02
+
+# --- Integration ---
+dt = 0.01
+frame_stride = 100      # steps between recorded position/velocity frames
+seed = 0
+
+# --- Initial cloud shape ---
+# cloud_r_max is the hard truncation radius; cloud_sigma is the Gaussian scale used to
+# sample within it. Keep cloud_r_max within a couple x cloud_sigma or the truncation
+# dominates and the cloud ends up close to uniform-density rather than centrally
+# concentrated (see e.g. the "why is there no swirl" conversation in project history).
+cloud_sigma = 5.0
+cloud_r_max = 10.0
+thermal_sigma = 0.4     # per-axis random ("thermal") velocity spread
+omega = [0.1, 0.03, 0.1]  # seeded solid-body rotation (omega x r); compare its
+                          # contribution to kinetic energy against thermal_sigma's --
+                          # too small relative to thermal motion gives a dispersion-
+                          # supported "elliptical" collapse instead of a rotating disk.
+
+# --- Physics constants ---
+g_constant = 1.0
+softening = 0.05
+total_mass = 1.0
+
+# --- Escape / parking (multiples of cloud_r_max) ---
+escape_radius_factor = 9.0   # beyond this, an unbound particle stops feeling forces
+park_radius_factor = 10.0    # beyond this (and still unbound), it's frozen for good

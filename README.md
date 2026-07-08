@@ -47,6 +47,15 @@ uv run src/visualize.py diagnostics my_run   # plot energy/angular-momentum cons
 ```
 
 Pass `--help` to any script for the full list of physical parameters (particle count,
-restitution, collision stickiness, cloud shape, rotation, softening, escape radii, etc.).
+restitution, collision stickiness, cloud shape, rotation, softening, escape radii, etc.),
+or, instead of a long flag list, point at a config file:
+
+```bash
+cp configs/example.toml configs/my_run.toml   # edit the fields you care about
+uv run src/run.py --config configs/my_run.toml --out my_run
+```
+
+`--config` is used exclusively when given -- see `configs/example.toml` for every field,
+commented.
 
 See `CLAUDE.md` for a closer look at the physics model and project layout.

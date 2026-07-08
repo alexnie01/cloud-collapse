@@ -37,11 +37,14 @@ def main(
     seed: int = 0,
     out: str = "run",
     interactive: bool = False,
+    config: str | None = None,
 ) -> None:
     """Run the collapse simulation and write a Zarr trajectory store.
 
     Parameters
     ----------
+    config: Path to a TOML run config (see configs/example.toml). When given, it's used
+        exclusively -- all other physics flags below are ignored (only `out` still applies).
     n_particles: Particle count (1..50000).
     restitution: Collision restitution for the normal velocity component (0..1).
     v_min_normal: Below this relative normal speed, collisions are perfectly elastic.
@@ -72,7 +75,9 @@ def main(
     out: Run name -- the trajectory is written to data/<out>/<out>.zarr.
     interactive: Prompt for n_particles/restitution/v_min_normal/n_steps instead of using flags.
     """
-    if interactive:
+    if config is not None:
+        params = RunParams.from_toml(config)
+    elif interactive:
         params = prompt_run_params()
     else:
         params = RunParams(
