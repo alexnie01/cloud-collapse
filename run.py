@@ -31,6 +31,7 @@ def main(
     particle_radius: float = 0.02,
     total_mass: float = 1.0,
     escape_radius_factor: float = 3.0,
+    park_radius_factor: float = 20.0,
     frame_stride: int = 25,
     seed: int = 0,
     out: str = "run.zarr",
@@ -66,6 +67,10 @@ def main(
     total_mass: Total system mass, held fixed regardless of n_particles.
     escape_radius_factor: Multiple of cloud_r_max defining "the system" -- unbound particles
         past this radius stop being integrated and coast in a straight line.
+    park_radius_factor: Multiple of cloud_r_max, further out than escape_radius_factor,
+        beyond which a coasting particle is frozen at the origin (position/velocity
+        zeroed) instead of tracked coasting forever; its KE/PE/L move into the run's
+        boiled-off diagnostics so conservation still holds over the whole system.
     frame_stride: Steps between recorded position/velocity frames.
     seed: Random seed.
     out: Output Zarr store path.
@@ -92,6 +97,7 @@ def main(
             particle_radius=particle_radius,
             total_mass=total_mass,
             escape_radius_factor=escape_radius_factor,
+            park_radius_factor=park_radius_factor,
             frame_stride=frame_stride,
             seed=seed,
         )

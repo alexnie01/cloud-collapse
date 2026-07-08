@@ -23,6 +23,7 @@ class RunParams:
     g_constant: float = 1.0
     total_mass: float = 1.0
     escape_radius_factor: float = 3.0
+    park_radius_factor: float = 20.0
     frame_stride: int = 25
     seed: int = 0
 
@@ -45,6 +46,11 @@ class RunParams:
             raise ValueError(f"total_mass must be > 0, got {self.total_mass}")
         if self.escape_radius_factor <= 1.0:
             raise ValueError(f"escape_radius_factor must be > 1, got {self.escape_radius_factor}")
+        if self.park_radius_factor <= self.escape_radius_factor:
+            raise ValueError(
+                f"park_radius_factor must be > escape_radius_factor, "
+                f"got {self.park_radius_factor} <= {self.escape_radius_factor}"
+            )
 
     @property
     def n_frames(self) -> int:
@@ -73,6 +79,18 @@ class RunParams:
         visualization box doesn't balloon to fit escaped particles.
         """
         return self.escape_radius_factor * self.cloud_r_max
+
+    @property
+    def park_radius(self) -> float:
+        """Distance beyond which a coasting (already-escaped) particle is frozen.
+
+        Past this radius, an escaped particle moving faster than escape velocity is
+        assumed gone for good: its position and velocity are zeroed (parked at the
+        origin) instead of being tracked coasting outward forever. Its KE/PE/L are
+        moved into the run's boiled-off totals first, so the conserved quantities
+        over the whole system are unaffected by the parking itself.
+        """
+        return self.park_radius_factor * self.cloud_r_max
 
     def to_dict(self) -> dict:
         return asdict(self)
