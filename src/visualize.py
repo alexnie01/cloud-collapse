@@ -46,6 +46,19 @@ def status_colors(
     return colors
 
 
+def per_particle_radius(masses: np.ndarray, particle_mass: float, base_radius: float) -> np.ndarray:
+    """Display radius per particle: base_radius * (mass / particle_mass)**(1/3).
+
+    Constant-density solid-sphere scaling (volume, hence mass, grows as r^3), so a
+    merged body visibly grows as it accretes. `particle_mass` is the original
+    single-particle mass (mass at t=0, before any merges) -- an unmerged particle
+    renders at exactly `base_radius`. Parked/merged-away particles have mass zeroed
+    (see integrate.py), so this naturally gives them radius 0 too; harmless since
+    they're already rendered invisible (see status_colors).
+    """
+    return base_radius * (masses / particle_mass) ** (1.0 / 3.0)
+
+
 def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     """PyVista GPU-backed 3D animation with lazy per-frame Zarr reads and on-screen physical time.
 
@@ -65,6 +78,14 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     bounds = (-R, R, -R, R, -R, R)
     arrow_length = 0.5 * R
 
+    # Baseline splat radius (world units) for an unmerged particle, calibrated to what
+    # point_size=6 rendered as before per-particle sizing existed -- same formula PyVista
+    # itself uses internally to convert point_size -> gaussian scale_factor for a scene
+    # of this bounding-box size, so the "no merges yet" look is unchanged.
+    particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
+    point_size = 6
+    base_radius = point_size * np.linalg.norm([2 * R, 2 * R, 2 * R]) / 1300
+
     def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
         return 0.5 * masses * np.einsum("ij,ij->i", velocities, velocities)
 
@@ -75,7 +96,17 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     cloud["colors"] = status_colors(
         frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
     )
-    plotter.add_points(cloud, style="points_gaussian", point_size=6, scalars="colors", rgb=True, opacity=0.85)
+    cloud["radius"] = per_particle_radius(frame0.masses, particle_mass, base_radius)
+    points_actor = plotter.add_points(
+        cloud,
+        style="points_gaussian",
+        point_size=point_size,
+        scalars="colors",
+        rgb=True,
+        opacity=0.85,
+        render_points_as_spheres=True,
+    )
+    points_actor.mapper.scale_array = "radius"
     plotter.add_mesh(pv.Box(bounds=bounds), style="wireframe", color="gray", opacity=0.4)
     plotter.show_bounds(
         bounds=bounds, grid="back", location="outer", color="white", xtitle="x", ytitle="y", ztitle="z"
@@ -83,7 +114,8 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     plotter.add_axes(color="white")
     text_actor = plotter.add_text(f"t = {times[0]:.3f}", position="upper_left", font_size=12, color="white")
     plotter.add_text(
-        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged",
+        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged\n"
+        "size = accreted mass",
         position="upper_right",
         font_size=10,
         color="white",
@@ -112,6 +144,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
         cloud["colors"] = status_colors(
             frame.escaped, frame.collided, frame.parked, frame.merged, per_particle_ke(frame.velocities, frame.masses)
         )
+        cloud["radius"] = per_particle_radius(frame.masses, particle_mass, base_radius)
         step_idx = frame_idx * frame_stride
         arrow_mesh.points = pv.Arrow(start=(0.0, 0.0, 0.0), direction=L_direction(step_idx), scale=arrow_length).points
         label = f"t = {times[frame_idx]:.3f}   frame {frame_idx}/{n_frames - 1}"
@@ -204,6 +237,14 @@ def matplotlib_fallback(store_path: str) -> None:
     R = float(root.attrs["escape_radius_factor"]) * float(root.attrs["cloud_r_max"])
     arrow_length = 0.5 * R
 
+    # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
+    # same constant-density r ~ mass**(1/3) radius growth as the PyVista viewer.
+    particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
+    base_size = 2.0
+
+    def marker_sizes(masses: np.ndarray) -> np.ndarray:
+        return base_size * (masses / particle_mass) ** (2.0 / 3.0)
+
     def L_direction(step_idx: int) -> np.ndarray:
         L = L_diag[step_idx]
         norm = np.linalg.norm(L)
@@ -215,7 +256,7 @@ def matplotlib_fallback(store_path: str) -> None:
         frame0.positions[:, 0],
         frame0.positions[:, 1],
         frame0.positions[:, 2],
-        s=2,
+        s=marker_sizes(frame0.masses),
         c=status_colors(
             frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
         )
@@ -232,7 +273,8 @@ def matplotlib_fallback(store_path: str) -> None:
     ax.text2D(
         0.0,
         1.02,
-        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged",
+        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged\n"
+        "size = accreted mass",
         transform=ax.transAxes,
         color="white",
     )
@@ -251,6 +293,7 @@ def matplotlib_fallback(store_path: str) -> None:
             )
             / 255.0
         )
+        scatter.set_sizes(marker_sizes(frame.masses))
         title.set_text(f"t = {times[frame_idx]:.3f}")
         quiver[0].remove()
         quiver[0] = ax.quiver(0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow")

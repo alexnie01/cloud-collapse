@@ -273,6 +273,7 @@ def run_simulation(params: RunParams, store_path: str) -> None:
                     boiled_L += angular_momentum(positions[park_idx], velocities[park_idx], masses[park_idx])
                     positions[park_idx] = 0.0
                     velocities[park_idx] = 0.0
+                    masses[park_idx] = 0.0
                     parked[park_idx] = True
 
             t = step * params.dt
