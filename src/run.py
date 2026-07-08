@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import os
+
 import cyclopts
 from rich.console import Console
 
 from cloud_collapse.params import RunParams, prompt_run_params
+from cloud_collapse.paths import data_path, output_path
 from cloud_collapse.physics.integrate import run_simulation
+from visualize import animate, plot_diagnostics
 
-app = cyclopts.App(help="Stage 1: simulate gravitational collapse of a particle cloud into a rotating disk.")
+app = cyclopts.App(help="Simulate and then render a cloud-collapse run in one command.")
 console = Console()
 
 
@@ -32,10 +36,19 @@ def main(
     park_radius_factor: float = 20.0,
     frame_stride: int = 25,
     seed: int = 0,
-    out: str = "run.zarr",
-    interactive: bool = False,
+    out: str = "run",
+    interactive_params: bool = False,
+    fps: int = 30,
+    interactive_view: bool = False,
+    show_diagnostics: bool = False,
 ) -> None:
-    """Run the collapse simulation and write a Zarr trajectory store.
+    """Run simulate.py's physics, then visualize.py's renderer, back to back.
+
+    By default this writes the trajectory to data/<out>/<out>.zarr and, no
+    display required, the rendered movie to outputs/<out>/<out>.mp4. Pass
+    --interactive-view to open a live PyVista window instead of exporting a
+    movie, or --show-diagnostics to also plot energy/angular-momentum
+    conservation once the run finishes.
 
     Parameters
     ----------
@@ -66,10 +79,13 @@ def main(
         boiled-off diagnostics so conservation still holds over the whole system.
     frame_stride: Steps between recorded position/velocity frames.
     seed: Random seed.
-    out: Output Zarr store path.
-    interactive: Prompt for n_particles/restitution/v_min_normal/n_steps instead of using flags.
+    out: Run name -- trajectory goes to data/<out>/<out>.zarr, movie to outputs/<out>/<out>.mp4.
+    interactive_params: Prompt for n_particles/restitution/v_min_normal/n_steps instead of flags.
+    fps: Movie frame rate (ignored with --interactive-view).
+    interactive_view: Open a live PyVista window instead of exporting a movie.
+    show_diagnostics: Also plot energy/angular-momentum diagnostics once rendering finishes.
     """
-    if interactive:
+    if interactive_params:
         params = prompt_run_params()
     else:
         params = RunParams(
@@ -92,12 +108,26 @@ def main(
             seed=seed,
         )
 
+    store_path = data_path(out)
+    os.makedirs(os.path.dirname(store_path), exist_ok=True)
+
     console.print(
         f"[bold]cloud-collapse[/bold]: N={params.n_particles}, steps={params.n_steps}, "
-        f"restitution={params.restitution}, v_min_normal={params.v_min_normal} -> {out}"
+        f"restitution={params.restitution}, v_min_normal={params.v_min_normal} -> {store_path}"
     )
-    run_simulation(params, out)
-    console.print(f"[green]Done.[/green] Trajectory written to {out}")
+    run_simulation(params, store_path)
+    console.print(f"[green]Simulation done.[/green] Trajectory written to {store_path}")
+
+    if interactive_view:
+        animate(store_path, fps=fps, export=None)
+    else:
+        movie_path = output_path(out)
+        os.makedirs(os.path.dirname(movie_path), exist_ok=True)
+        animate(store_path, fps=fps, export=movie_path)
+        console.print(f"[green]Movie written to {movie_path}[/green]")
+
+    if show_diagnostics:
+        plot_diagnostics(store_path)
 
 
 if __name__ == "__main__":

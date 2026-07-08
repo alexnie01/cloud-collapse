@@ -10,6 +10,7 @@ from matplotlib.animation import FuncAnimation
 from rich.progress import Progress, track
 
 from cloud_collapse.io.trajectory_store import open_store, read_frame
+from cloud_collapse.paths import data_path
 
 app = cyclopts.App(help="Stage 2: view a cloud-collapse Zarr trajectory.")
 
@@ -313,21 +314,32 @@ def plot_diagnostics(store_path: str) -> None:
 
 
 @app.command
-def show(store_path: str, fps: int = 30, export: str | None = None) -> None:
-    """Animate a trajectory with PyVista (GPU-backed)."""
-    animate(store_path, fps=fps, export=export)
+def show(name: str, fps: int = 30, export: str | None = None) -> None:
+    """Animate a trajectory with PyVista (GPU-backed).
+
+    name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
+    export: Movie output path, if given (e.g. outputs/<name>/<name>.mp4); omit for
+        an interactive window instead.
+    """
+    animate(data_path(name), fps=fps, export=export)
 
 
 @app.command
-def fallback(store_path: str) -> None:
-    """Animate a trajectory with matplotlib (no VTK/GPU dependency)."""
-    matplotlib_fallback(store_path)
+def fallback(name: str) -> None:
+    """Animate a trajectory with matplotlib (no VTK/GPU dependency).
+
+    name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
+    """
+    matplotlib_fallback(data_path(name))
 
 
 @app.command
-def diagnostics(store_path: str) -> None:
-    """Plot energy and angular momentum conservation diagnostics."""
-    plot_diagnostics(store_path)
+def diagnostics(name: str) -> None:
+    """Plot energy and angular momentum conservation diagnostics.
+
+    name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
+    """
+    plot_diagnostics(data_path(name))
 
 
 if __name__ == "__main__":

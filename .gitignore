@@ -9,7 +9,8 @@ CLAUDE.md
 *.npz
 *.npy
 
-# Run outputs (regenerable via simulate.py / visualize.py)
+# Run data and rendered outputs (regenerable via src/simulate.py / src/visualize.py / src/run.py)
+data/
 outputs/
 
 # Python
