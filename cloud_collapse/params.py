@@ -105,12 +105,22 @@ class RunParams:
         """Load a run config from a TOML file -- only fields present override defaults.
 
         See configs/example.toml for a fully-commented template covering every field.
+        `out` (the run name) is read separately by out_name_from_toml -- it isn't a
+        physics parameter, so it's not a RunParams field and is dropped here.
         """
         with open(path, "rb") as f:
             data = tomllib.load(f)
+        data.pop("out", None)
         if "omega" in data:
             data["omega"] = tuple(data["omega"])
         return cls(**data)
+
+
+def out_name_from_toml(path: str | Path) -> str | None:
+    """Read just the optional `out` (run name) field from a TOML config, if present."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return data.get("out")
 
 
 def prompt_run_params() -> RunParams:

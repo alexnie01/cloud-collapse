@@ -4,6 +4,11 @@
 #
 # When --config is given, it's used exclusively: individual CLI flags are ignored.
 
+# --- Run naming (not a physics param -- read separately from RunParams) ---
+# Optional: sets the default --out (data/<out>/<out>.zarr, outputs/<out>/<out>.mp4).
+# An explicit --out flag on the command line still overrides this.
+out = "example"
+
 # --- Required (no default) ---
 n_particles = 5000
 restitution = 0.8       # collision restitution, normal component (0..1)

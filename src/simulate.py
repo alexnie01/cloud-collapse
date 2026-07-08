@@ -5,7 +5,7 @@ import os
 import cyclopts
 from rich.console import Console
 
-from cloud_collapse.params import RunParams, prompt_run_params
+from cloud_collapse.params import RunParams, out_name_from_toml, prompt_run_params
 from cloud_collapse.paths import data_path
 from cloud_collapse.physics.integrate import run_simulation
 
@@ -35,7 +35,7 @@ def main(
     park_radius_factor: float = 20.0,
     frame_stride: int = 25,
     seed: int = 0,
-    out: str = "run",
+    out: str | None = None,
     interactive: bool = False,
     config: str | None = None,
 ) -> None:
@@ -44,7 +44,8 @@ def main(
     Parameters
     ----------
     config: Path to a TOML run config (see configs/example.toml). When given, it's used
-        exclusively -- all other physics flags below are ignored (only `out` still applies).
+        exclusively -- all other physics flags below are ignored. May also set `out`
+        directly in the file; an explicit --out flag still takes precedence over that.
     n_particles: Particle count (1..50000).
     restitution: Collision restitution for the normal velocity component (0..1).
     v_min_normal: Below this relative normal speed, collisions are perfectly elastic.
@@ -72,11 +73,13 @@ def main(
         boiled-off diagnostics so conservation still holds over the whole system.
     frame_stride: Steps between recorded position/velocity frames.
     seed: Random seed.
-    out: Run name -- the trajectory is written to data/<out>/<out>.zarr.
+    out: Run name -- the trajectory is written to data/<out>/<out>.zarr. Defaults to "run",
+        or to the config file's own `out` field if --config sets one.
     interactive: Prompt for n_particles/restitution/v_min_normal/n_steps instead of using flags.
     """
     if config is not None:
         params = RunParams.from_toml(config)
+        out = out or out_name_from_toml(config)
     elif interactive:
         params = prompt_run_params()
     else:
@@ -100,7 +103,7 @@ def main(
             seed=seed,
         )
 
-    store_path = data_path(out)
+    store_path = data_path(out or "run")
     os.makedirs(os.path.dirname(store_path), exist_ok=True)
 
     console.print(
