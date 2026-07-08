@@ -18,6 +18,11 @@ _RED = np.array([255, 0, 0], dtype=np.uint8)
 _GREEN = np.array([0, 255, 0], dtype=np.uint8)
 _BLACK = np.array([0, 0, 0], dtype=np.uint8)
 
+# Mass ratio (relative to the original single-particle mass) at which a particle
+# switches from a tiny flat "star" glow to a lit, yellow-shaded "planet" sphere.
+_PLANET_MASS_RATIO = 3.0
+_PLANET_COLOR = np.array([255, 200, 60], dtype=np.uint8)
+
 
 def status_colors(
     escaped: np.ndarray, collided: np.ndarray, parked: np.ndarray, merged: np.ndarray, kinetic_energy: np.ndarray
@@ -59,6 +64,25 @@ def per_particle_radius(masses: np.ndarray, particle_mass: float, base_radius: f
     return base_radius * (masses / particle_mass) ** (1.0 / 3.0)
 
 
+def tiered_radii(
+    masses: np.ndarray, particle_mass: float, base_radius: float, planet_ratio: float = _PLANET_MASS_RATIO
+) -> tuple[np.ndarray, np.ndarray]:
+    """Split each particle's display radius into a (star_radius, planet_radius) pair.
+
+    Below `planet_ratio` accreted mass, a particle is a "star": fixed tiny radius, no
+    real growth, meant to be rendered flat/emissive (no lighting) like the original
+    look before per-particle sizing existed. At/above it, a particle is a "planet":
+    real per_particle_radius growth, meant to be rendered as a lit, shaded sphere.
+    Each particle gets radius 0 in whichever tier it doesn't currently belong to, so
+    both tiers can be drawn as separate fixed-size actors without double-rendering
+    any particle.
+    """
+    is_planet = (masses / particle_mass) >= planet_ratio
+    star_radius = np.where(is_planet, 0.0, base_radius)
+    planet_radius = np.where(is_planet, per_particle_radius(masses, particle_mass, base_radius), 0.0)
+    return star_radius, planet_radius
+
+
 def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     """PyVista GPU-backed 3D animation with lazy per-frame Zarr reads and on-screen physical time.
 
@@ -91,22 +115,53 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
 
     plotter = pv.Plotter(off_screen=export is not None)
     plotter.set_background("black")
+
     frame0 = read_frame(root, 0)
-    cloud = pv.PolyData(frame0.positions)
-    cloud["colors"] = status_colors(
+    colors0 = status_colors(
         frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
     )
-    cloud["radius"] = per_particle_radius(frame0.masses, particle_mass, base_radius)
-    points_actor = plotter.add_points(
-        cloud,
+    star_radius0, planet_radius0 = tiered_radii(frame0.masses, particle_mass, base_radius)
+    planet_colors0 = np.tile(_PLANET_COLOR, (frame0.positions.shape[0], 1))
+
+    # "Stars": tiny, flat, soft-glowing points (render_points_as_spheres=False gives a
+    # camera-facing gaussian blob, not a lit 3D sphere) -- matches the plain point-like
+    # look particles had before per-particle sizing existed. NB emissive=True makes these
+    # invisible with this PyVista/VTK version (verified empirically) -- do not set it.
+    star_cloud = pv.PolyData(frame0.positions)
+    star_cloud["colors"] = colors0
+    star_cloud["radius"] = star_radius0
+    star_actor = plotter.add_points(
+        star_cloud,
         style="points_gaussian",
         point_size=point_size,
         scalars="colors",
         rgb=True,
         opacity=0.85,
+        render_points_as_spheres=False,
+    )
+    star_actor.mapper.scale_array = "radius"
+
+    # "Planets": real lit spheres (accreted past _PLANET_MASS_RATIO). PointGaussianMapper's
+    # sphere shading is a fixed radial-brightness falloff multiplied onto each point's own
+    # color -- it does *not* respond to scene lights or Property.specular/ambient (verified
+    # empirically: identical render regardless of light/specular color), so "yellow shading"
+    # has to come from the point's base color itself, not from lighting. Hence a fixed warm
+    # gold color for every planet, replacing the KE-gradient color used for stars.
+    planet_cloud = pv.PolyData(frame0.positions)
+    planet_cloud["colors"] = planet_colors0
+    planet_cloud["radius"] = planet_radius0
+    planet_actor = plotter.add_points(
+        planet_cloud,
+        style="points_gaussian",
+        point_size=point_size,
+        scalars="colors",
+        rgb=True,
+        opacity=1.0,
+        emissive=False,
         render_points_as_spheres=True,
     )
-    points_actor.mapper.scale_array = "radius"
+    planet_actor.mapper.scale_array = "radius"
+
     plotter.add_mesh(pv.Box(bounds=bounds), style="wireframe", color="gray", opacity=0.4)
     plotter.show_bounds(
         bounds=bounds, grid="back", location="outer", color="white", xtitle="x", ytitle="y", ztitle="z"
@@ -115,7 +170,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     text_actor = plotter.add_text(f"t = {times[0]:.3f}", position="upper_left", font_size=12, color="white")
     plotter.add_text(
         "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged\n"
-        "size = accreted mass",
+        f"dot = star   yellow sphere = accreted body (>= {_PLANET_MASS_RATIO:.0f}x mass)",
         position="upper_right",
         font_size=10,
         color="white",
@@ -140,11 +195,15 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
 
     def render_frame(frame_idx: int, paused: bool) -> None:
         frame = read_frame(root, frame_idx)
-        cloud.points = frame.positions
-        cloud["colors"] = status_colors(
+        colors = status_colors(
             frame.escaped, frame.collided, frame.parked, frame.merged, per_particle_ke(frame.velocities, frame.masses)
         )
-        cloud["radius"] = per_particle_radius(frame.masses, particle_mass, base_radius)
+        star_radius, planet_radius = tiered_radii(frame.masses, particle_mass, base_radius)
+        star_cloud.points = frame.positions
+        star_cloud["colors"] = colors
+        star_cloud["radius"] = star_radius
+        planet_cloud.points = frame.positions
+        planet_cloud["radius"] = planet_radius
         step_idx = frame_idx * frame_stride
         arrow_mesh.points = pv.Arrow(start=(0.0, 0.0, 0.0), direction=L_direction(step_idx), scale=arrow_length).points
         label = f"t = {times[frame_idx]:.3f}   frame {frame_idx}/{n_frames - 1}"
@@ -243,7 +302,12 @@ def matplotlib_fallback(store_path: str) -> None:
     base_size = 2.0
 
     def marker_sizes(masses: np.ndarray) -> np.ndarray:
-        return base_size * (masses / particle_mass) ** (2.0 / 3.0)
+        # matplotlib has no real lighting/shading model, so there's no "planet" look to
+        # switch to here -- just keep sizes flat (star-like) below the same mass-ratio
+        # threshold the PyVista viewer uses, and grow past it, for visual consistency.
+        mass_ratio = masses / particle_mass
+        is_planet = mass_ratio >= _PLANET_MASS_RATIO
+        return np.where(is_planet, base_size * mass_ratio ** (2.0 / 3.0), base_size)
 
     def L_direction(step_idx: int) -> np.ndarray:
         L = L_diag[step_idx]
