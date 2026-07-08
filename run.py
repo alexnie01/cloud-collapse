@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import os
+
 import cyclopts
 from rich.console import Console
 
 from cloud_collapse.params import RunParams, prompt_run_params
 from cloud_collapse.physics.integrate import run_simulation
+from visualize import animate, plot_diagnostics
 
-app = cyclopts.App(help="Stage 1: simulate gravitational collapse of a particle cloud into a rotating disk.")
+app = cyclopts.App(help="Simulate and then render a cloud-collapse run in one command.")
 console = Console()
 
 
@@ -31,9 +34,19 @@ def main(
     frame_stride: int = 25,
     seed: int = 0,
     out: str = "run.zarr",
-    interactive: bool = False,
+    interactive_params: bool = False,
+    movie: str | None = None,
+    fps: int = 30,
+    interactive_view: bool = False,
+    show_diagnostics: bool = False,
 ) -> None:
-    """Run the collapse simulation and write a Zarr trajectory store.
+    """Run simulate.py's physics, then visualize.py's renderer, back to back.
+
+    By default this writes `out` (the Zarr trajectory) and, next to it, a
+    movie file with the same basename (e.g. run.zarr -> run.mp4) -- no
+    display required. Pass --interactive-view to open a live PyVista window
+    instead of exporting a movie, or --show-diagnostics to also plot
+    energy/angular-momentum conservation once the run finishes.
 
     Parameters
     ----------
@@ -56,9 +69,13 @@ def main(
     frame_stride: Steps between recorded position/velocity frames.
     seed: Random seed.
     out: Output Zarr store path.
-    interactive: Prompt for n_particles/restitution/v_min_normal/n_steps instead of using flags.
+    interactive_params: Prompt for n_particles/restitution/v_min_normal/n_steps instead of flags.
+    movie: Movie output path. Defaults to `out` with its extension swapped to .mp4.
+    fps: Movie frame rate (ignored with --interactive-view).
+    interactive_view: Open a live PyVista window instead of exporting a movie.
+    show_diagnostics: Also plot energy/angular-momentum diagnostics once rendering finishes.
     """
-    if interactive:
+    if interactive_params:
         params = prompt_run_params()
     else:
         params = RunParams(
@@ -84,7 +101,17 @@ def main(
         f"restitution={params.restitution}, v_min_normal={params.v_min_normal} -> {out}"
     )
     run_simulation(params, out)
-    console.print(f"[green]Done.[/green] Trajectory written to {out}")
+    console.print(f"[green]Simulation done.[/green] Trajectory written to {out}")
+
+    if interactive_view:
+        animate(out, fps=fps, export=None)
+    else:
+        movie_path = movie or os.path.splitext(out)[0] + ".mp4"
+        animate(out, fps=fps, export=movie_path)
+        console.print(f"[green]Movie written to {movie_path}[/green]")
+
+    if show_diagnostics:
+        plot_diagnostics(out)
 
 
 if __name__ == "__main__":

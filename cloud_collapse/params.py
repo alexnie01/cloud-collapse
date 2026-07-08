@@ -22,6 +22,7 @@ class RunParams:
     particle_radius: float = 0.02
     g_constant: float = 1.0
     total_mass: float = 1.0
+    escape_radius_factor: float = 3.0
     frame_stride: int = 25
     seed: int = 0
 
@@ -42,6 +43,8 @@ class RunParams:
             raise ValueError(f"particle_radius must be > 0, got {self.particle_radius}")
         if self.total_mass <= 0.0:
             raise ValueError(f"total_mass must be > 0, got {self.total_mass}")
+        if self.escape_radius_factor <= 1.0:
+            raise ValueError(f"escape_radius_factor must be > 1, got {self.escape_radius_factor}")
 
     @property
     def n_frames(self) -> int:
@@ -61,6 +64,15 @@ class RunParams:
         finer resolution of the same cloud, not a heavier one.
         """
         return self.total_mass / self.n_particles
+
+    @property
+    def escape_radius(self) -> float:
+        """Fixed radius defining "the system": beyond this, an unbound particle stops
+
+        being integrated. Also used as the fixed display size in Stage 2, so the
+        visualization box doesn't balloon to fit escaped particles.
+        """
+        return self.escape_radius_factor * self.cloud_r_max
 
     def to_dict(self) -> dict:
         return asdict(self)
