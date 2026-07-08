@@ -6,6 +6,9 @@
 *.npz
 *.npy
 
+# Run outputs (regenerable via simulate.py / visualize.py)
+outputs/
+
 # Python
 __pycache__/
 *.pyc
