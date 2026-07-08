@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+
+# Trajectory output (regenerable, large)
+*.zarr/
+*.npz
+*.npy
+
+# Python
+__pycache__/
+*.pyc
+
+# uv
+.python-version
+
+# OS
+.DS_Store
