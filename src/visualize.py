@@ -102,12 +102,13 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     bounds = (-R, R, -R, R, -R, R)
     arrow_length = 0.5 * R
 
-    # Baseline splat radius (world units) for an unmerged particle, calibrated to what
-    # point_size=6 rendered as before per-particle sizing existed -- same formula PyVista
-    # itself uses internally to convert point_size -> gaussian scale_factor for a scene
-    # of this bounding-box size, so the "no merges yet" look is unchanged.
+    # Baseline splat radius (world units) for an unmerged particle -- same formula PyVista
+    # itself uses internally to convert point_size -> gaussian scale_factor for a scene of
+    # this bounding-box size. point_size is deliberately small so unmerged particles start
+    # out as faint pinpricks, leaving accretion (tiered_radii/per_particle_radius) as the
+    # dominant visual size cue.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    point_size = 6
+    point_size = 2
     base_radius = point_size * np.linalg.norm([2 * R, 2 * R, 2 * R]) / 1300
 
     def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
@@ -136,7 +137,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
         point_size=point_size,
         scalars="colors",
         rgb=True,
-        opacity=0.85,
+        opacity=0.5,
         render_points_as_spheres=False,
     )
     star_actor.mapper.scale_array = "radius"
@@ -156,7 +157,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
         point_size=point_size,
         scalars="colors",
         rgb=True,
-        opacity=1.0,
+        opacity=0.8,
         emissive=False,
         render_points_as_spheres=True,
     )
@@ -299,7 +300,7 @@ def matplotlib_fallback(store_path: str) -> None:
     # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
     # same constant-density r ~ mass**(1/3) radius growth as the PyVista viewer.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    base_size = 2.0
+    base_size = 0.5
 
     def marker_sizes(masses: np.ndarray) -> np.ndarray:
         # matplotlib has no real lighting/shading model, so there's no "planet" look to
@@ -325,6 +326,7 @@ def matplotlib_fallback(store_path: str) -> None:
             frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
         )
         / 255.0,
+        alpha=0.6,
     )
     ax.set_facecolor("black")
     fig.patch.set_facecolor("black")
@@ -358,6 +360,7 @@ def matplotlib_fallback(store_path: str) -> None:
             / 255.0
         )
         scatter.set_sizes(marker_sizes(frame.masses))
+        scatter.set_alpha(0.6)  # set_color above resets alpha, so reapply every frame
         title.set_text(f"t = {times[frame_idx]:.3f}")
         quiver[0].remove()
         quiver[0] = ax.quiver(0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow")
