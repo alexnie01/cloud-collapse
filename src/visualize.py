@@ -185,8 +185,15 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
         norm = np.linalg.norm(L)
         return L / norm if norm > 0 else np.array([0.0, 0.0, 1.0])
 
-    arrow_mesh = pv.Arrow(start=(0.0, 0.0, 0.0), direction=L_direction(0), scale=arrow_length)
-    plotter.add_mesh(arrow_mesh, color="yellow")
+    def make_arrow(direction: np.ndarray) -> pv.PolyData:
+        # Narrower than pv.Arrow's defaults (shaft_radius=0.05, tip_radius=0.1) -- this is
+        # a reference vector, not something meant to visually compete with the particles.
+        return pv.Arrow(
+            start=(0.0, 0.0, 0.0), direction=direction, scale=arrow_length, shaft_radius=0.015, tip_radius=0.035
+        )
+
+    arrow_mesh = make_arrow(L_direction(0))
+    plotter.add_mesh(arrow_mesh, color="yellow", opacity=0.35)
     plotter.add_text("yellow arrow = conserved angular momentum L", position="lower_left", font_size=10, color="yellow")
 
     plotter.show(auto_close=False, interactive_update=True)
@@ -206,7 +213,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
         planet_cloud.points = frame.positions
         planet_cloud["radius"] = planet_radius
         step_idx = frame_idx * frame_stride
-        arrow_mesh.points = pv.Arrow(start=(0.0, 0.0, 0.0), direction=L_direction(step_idx), scale=arrow_length).points
+        arrow_mesh.points = make_arrow(L_direction(step_idx)).points
         label = f"t = {times[frame_idx]:.3f}   frame {frame_idx}/{n_frames - 1}"
         if paused:
             label += "   [PAUSED]"
@@ -345,7 +352,7 @@ def matplotlib_fallback(store_path: str) -> None:
         color="white",
     )
     title = ax.set_title(f"t = {times[0]:.3f}", color="white")
-    quiver = [ax.quiver(0, 0, 0, *(arrow_length * L_direction(0)), color="yellow")]
+    quiver = [ax.quiver(0, 0, 0, *(arrow_length * L_direction(0)), color="yellow", alpha=0.35, linewidth=1.0)]
     progress = Progress()
     progress_task = progress.add_task("Playing", total=n_frames)
     progress.start()
@@ -363,7 +370,9 @@ def matplotlib_fallback(store_path: str) -> None:
         scatter.set_alpha(0.6)  # set_color above resets alpha, so reapply every frame
         title.set_text(f"t = {times[frame_idx]:.3f}")
         quiver[0].remove()
-        quiver[0] = ax.quiver(0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow")
+        quiver[0] = ax.quiver(
+            0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow", alpha=0.35, linewidth=1.0
+        )
         progress.update(progress_task, advance=1)
         if frame_idx == n_frames - 1:
             progress.stop()
