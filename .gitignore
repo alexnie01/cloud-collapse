@@ -1,6 +1,9 @@
 # Virtual environment
 .venv/
 
+# Local Claude Code instructions (not tracked)
+CLAUDE.md
+
 # Trajectory output (regenerable, large)
 *.zarr/
 *.npz
