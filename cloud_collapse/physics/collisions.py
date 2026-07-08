@@ -201,14 +201,21 @@ def resolve_collisions(
     pairs: np.ndarray,
     restitution: float,
     v_min_normal: float,
-) -> None:
-    """Resolve each pair's normal-component velocity in place.
+    stick_velocity: float,
+) -> np.ndarray:
+    """Resolve each pair's normal-component velocity in place; flag pairs to merge.
 
     Below v_min_normal relative normal speed, the collision is treated as
     perfectly elastic (restitution forced to 1) regardless of the configured
-    restitution. Deliberately sequential: pairs can share a particle, so
-    parallel updates would race on that particle's velocity.
+    restitution. Below the (independent) stick_velocity, the pair sticks instead
+    of bouncing at all: flagged True in the returned mask and left with untouched
+    velocities here, since the caller applies the actual merge in global-index
+    space (combining two particles changes who's active globally, not just local
+    velocities) and overwrites both with the merged body's center-of-mass motion.
+    Deliberately sequential: pairs can share a particle, so parallel updates
+    would race on that particle's velocity.
     """
+    merge_mask = np.zeros(pairs.shape[0], dtype=np.bool_)
     for k in range(pairs.shape[0]):
         i = pairs[k, 0]
         j = pairs[k, 1]
@@ -225,6 +232,9 @@ def resolve_collisions(
         vn = vrx * nx + vry * ny + vrz * nz
         if vn <= 0.0:
             continue  # separating along the normal, no response needed
+        if vn < stick_velocity:
+            merge_mask[k] = True
+            continue
         e_eff = 1.0 if abs(vn) < v_min_normal else restitution
         inv_mi = 1.0 / masses[i]
         inv_mj = 1.0 / masses[j]
@@ -235,3 +245,4 @@ def resolve_collisions(
         velocities[j, 0] -= jn * inv_mj * nx
         velocities[j, 1] -= jn * inv_mj * ny
         velocities[j, 2] -= jn * inv_mj * nz
+    return merge_mask

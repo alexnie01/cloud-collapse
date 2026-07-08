@@ -13,6 +13,7 @@ class RunParams:
     restitution: float
     v_min_normal: float
     n_steps: int
+    stick_velocity: float = 0.05
     dt: float = 0.01
     cloud_sigma: float = 1.0
     cloud_r_max: float = 4.0
@@ -34,6 +35,8 @@ class RunParams:
             raise ValueError(f"restitution must be in [0, 1], got {self.restitution}")
         if self.v_min_normal < 0.0:
             raise ValueError(f"v_min_normal must be >= 0, got {self.v_min_normal}")
+        if self.stick_velocity < 0.0:
+            raise ValueError(f"stick_velocity must be >= 0, got {self.stick_velocity}")
         if self.n_steps < 1:
             raise ValueError(f"n_steps must be >= 1, got {self.n_steps}")
         if self.frame_stride < 1:

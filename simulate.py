@@ -17,6 +17,7 @@ def main(
     v_min_normal: float = 0.01,
     n_steps: int = 5_000,
     *,
+    stick_velocity: float = 0.05,
     dt: float = 0.01,
     cloud_sigma: float = 1.0,
     cloud_r_max: float = 4.0,
@@ -42,6 +43,11 @@ def main(
     restitution: Collision restitution for the normal velocity component (0..1).
     v_min_normal: Below this relative normal speed, collisions are perfectly elastic.
     n_steps: Number of integration steps.
+    stick_velocity: Below this relative normal approach speed, colliding particles merge
+        (perfectly inelastic, conserving mass/momentum/angular momentum) instead of
+        bouncing at all. Independent of v_min_normal, which only affects non-merging
+        bounces. Any angular momentum not explained by the merged body's bulk motion is
+        banked as spin (bookkeeping only -- it doesn't feed back into forces or collisions).
     dt: Integration timestep.
     cloud_sigma: Isotropic Gaussian scale of the initial cloud.
     cloud_r_max: Truncation radius for the initial cloud.
@@ -71,6 +77,7 @@ def main(
             restitution=restitution,
             v_min_normal=v_min_normal,
             n_steps=n_steps,
+            stick_velocity=stick_velocity,
             dt=dt,
             cloud_sigma=cloud_sigma,
             cloud_r_max=cloud_r_max,

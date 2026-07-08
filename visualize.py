@@ -18,17 +18,20 @@ _GREEN = np.array([0, 255, 0], dtype=np.uint8)
 _BLACK = np.array([0, 0, 0], dtype=np.uint8)
 
 
-def status_colors(escaped: np.ndarray, collided: np.ndarray, parked: np.ndarray, kinetic_energy: np.ndarray) -> np.ndarray:
+def status_colors(
+    escaped: np.ndarray, collided: np.ndarray, parked: np.ndarray, merged: np.ndarray, kinetic_energy: np.ndarray
+) -> np.ndarray:
     """Per-particle RGB, straight from stored/derived per-frame data (never recomputed elsewhere):
-    green = escaped (still coasting), red = collided sometime since the last recorded
-    frame, black = parked (frozen at the origin, invisible against the black background),
-    otherwise a white-to-red gradient by kinetic energy (redder = faster), normalized
-    against the fastest currently-bound, non-colliding particle in this frame.
+    green = escaped (still coasting), red = collided sometime since the last recorded frame,
+    black = parked or merged-away (both frozen at the origin, invisible against the black
+    background), otherwise a white-to-red gradient by kinetic energy (redder = faster),
+    normalized against the fastest currently-bound, non-colliding particle in this frame.
     """
     n = len(escaped)
     colors = np.full((n, 3), 255, dtype=np.uint8)
+    frozen = parked | merged
 
-    bound = ~escaped & ~collided & ~parked
+    bound = ~escaped & ~collided & ~frozen
     if bound.any():
         ke_bound = kinetic_energy[bound]
         ke_max = ke_bound.max()
@@ -36,9 +39,9 @@ def status_colors(escaped: np.ndarray, collided: np.ndarray, parked: np.ndarray,
         colors[bound, 1] = fade
         colors[bound, 2] = fade
 
-    colors[collided & ~escaped & ~parked] = _RED
-    colors[escaped & ~parked] = _GREEN
-    colors[parked] = _BLACK
+    colors[collided & ~escaped & ~frozen] = _RED
+    colors[escaped & ~frozen] = _GREEN
+    colors[frozen] = _BLACK
     return colors
 
 
@@ -61,16 +64,16 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     bounds = (-R, R, -R, R, -R, R)
     arrow_length = 0.5 * R
 
-    masses = root["masses"][:]
-
-    def per_particle_ke(velocities: np.ndarray) -> np.ndarray:
+    def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
         return 0.5 * masses * np.einsum("ij,ij->i", velocities, velocities)
 
     plotter = pv.Plotter(off_screen=export is not None)
     plotter.set_background("black")
-    positions0, velocities0, escaped0, collided0, parked0 = read_frame(root, 0)
-    cloud = pv.PolyData(positions0)
-    cloud["colors"] = status_colors(escaped0, collided0, parked0, per_particle_ke(velocities0))
+    frame0 = read_frame(root, 0)
+    cloud = pv.PolyData(frame0.positions)
+    cloud["colors"] = status_colors(
+        frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
+    )
     plotter.add_points(cloud, style="points_gaussian", point_size=6, scalars="colors", rgb=True, opacity=0.85)
     plotter.add_mesh(pv.Box(bounds=bounds), style="wireframe", color="gray", opacity=0.4)
     plotter.show_bounds(
@@ -79,7 +82,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     plotter.add_axes(color="white")
     text_actor = plotter.add_text(f"t = {times[0]:.3f}", position="upper_left", font_size=12, color="white")
     plotter.add_text(
-        "white->red = kinetic energy   red = collided   green = escaped   black = parked",
+        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged",
         position="upper_right",
         font_size=10,
         color="white",
@@ -103,9 +106,11 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     slider_ref = {"widget": None}
 
     def render_frame(frame_idx: int, paused: bool) -> None:
-        positions, velocities, escaped, collided, parked = read_frame(root, frame_idx)
-        cloud.points = positions
-        cloud["colors"] = status_colors(escaped, collided, parked, per_particle_ke(velocities))
+        frame = read_frame(root, frame_idx)
+        cloud.points = frame.positions
+        cloud["colors"] = status_colors(
+            frame.escaped, frame.collided, frame.parked, frame.merged, per_particle_ke(frame.velocities, frame.masses)
+        )
         step_idx = frame_idx * frame_stride
         arrow_mesh.points = pv.Arrow(start=(0.0, 0.0, 0.0), direction=L_direction(step_idx), scale=arrow_length).points
         label = f"t = {times[frame_idx]:.3f}   frame {frame_idx}/{n_frames - 1}"
@@ -188,12 +193,11 @@ def matplotlib_fallback(store_path: str) -> None:
     times = root["times"][:]
     frame_stride = int(root.attrs["frame_stride"])
     L_diag = root["diagnostics"]["angular_momentum"]
-    masses = root["masses"][:]
 
-    def per_particle_ke(velocities: np.ndarray) -> np.ndarray:
+    def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
         return 0.5 * masses * np.einsum("ij,ij->i", velocities, velocities)
 
-    positions0, velocities0, escaped0, collided0, parked0 = read_frame(root, 0)
+    frame0 = read_frame(root, 0)
 
     # Fixed system size (escape_radius from the run params), matching the PyVista viewer.
     R = float(root.attrs["escape_radius_factor"]) * float(root.attrs["cloud_r_max"])
@@ -207,11 +211,14 @@ def matplotlib_fallback(store_path: str) -> None:
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
     scatter = ax.scatter(
-        positions0[:, 0],
-        positions0[:, 1],
-        positions0[:, 2],
+        frame0.positions[:, 0],
+        frame0.positions[:, 1],
+        frame0.positions[:, 2],
         s=2,
-        c=status_colors(escaped0, collided0, parked0, per_particle_ke(velocities0)) / 255.0,
+        c=status_colors(
+            frame0.escaped, frame0.collided, frame0.parked, frame0.merged, per_particle_ke(frame0.velocities, frame0.masses)
+        )
+        / 255.0,
     )
     ax.set_facecolor("black")
     fig.patch.set_facecolor("black")
@@ -224,7 +231,7 @@ def matplotlib_fallback(store_path: str) -> None:
     ax.text2D(
         0.0,
         1.02,
-        "white->red = kinetic energy   red = collided   green = escaped   black = parked",
+        "white->red = kinetic energy   red = collided   green = escaped   black = parked/merged",
         transform=ax.transAxes,
         color="white",
     )
@@ -235,9 +242,14 @@ def matplotlib_fallback(store_path: str) -> None:
     progress.start()
 
     def update(frame_idx: int):
-        positions, velocities, escaped, collided, parked = read_frame(root, frame_idx)
-        scatter._offsets3d = (positions[:, 0], positions[:, 1], positions[:, 2])
-        scatter.set_color(status_colors(escaped, collided, parked, per_particle_ke(velocities)) / 255.0)
+        frame = read_frame(root, frame_idx)
+        scatter._offsets3d = (frame.positions[:, 0], frame.positions[:, 1], frame.positions[:, 2])
+        scatter.set_color(
+            status_colors(
+                frame.escaped, frame.collided, frame.parked, frame.merged, per_particle_ke(frame.velocities, frame.masses)
+            )
+            / 255.0
+        )
         title.set_text(f"t = {times[frame_idx]:.3f}")
         quiver[0].remove()
         quiver[0] = ax.quiver(0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow")
@@ -259,9 +271,10 @@ def plot_diagnostics(store_path: str) -> None:
     frame cadence -- hence the two different time axes below. kinetic_energy/
     potential_energy/angular_momentum are already whole-system totals (they
     include the boiled_* contribution moved out of the live particles when
-    one escapes or gets parked); the boiled_* series are plotted separately,
-    dotted, just to show how much of each total has drained out of the live
-    system over time -- they step up at escape/park events, never down.
+    one escapes or gets parked, and angular_momentum also includes spin banked
+    in by merges); the boiled_*/spin series are plotted separately, dotted,
+    just to show how much of each total has moved out of the live/orbital
+    part over time -- they step up at escape/park/merge events, never down.
     """
     root = open_store(store_path)
     diag = root["diagnostics"]
@@ -271,6 +284,7 @@ def plot_diagnostics(store_path: str) -> None:
     L = diag["angular_momentum"][:]
     boiled_ke = diag["boiled_kinetic_energy"][:]
     boiled_L = diag["boiled_angular_momentum"][:]
+    spin_L = diag["spin_angular_momentum"][:]
     t_frames = root["times"][:]
     pe = diag["potential_energy"][:]
     boiled_pe = diag["boiled_potential_energy"][:]
@@ -289,6 +303,7 @@ def plot_diagnostics(store_path: str) -> None:
     axes[1].plot(t_full, L[:, 1], label="Ly")
     axes[1].plot(t_full, L[:, 2], label="Lz")
     axes[1].plot(t_full, np.linalg.norm(boiled_L, axis=1), label="Boiled-off |L|", linestyle=":", color="gray")
+    axes[1].plot(t_full, np.linalg.norm(spin_L, axis=1), label="Spin |L| (merged)", linestyle=":", color="orange")
     axes[1].set_ylabel("Angular momentum")
     axes[1].set_xlabel("Physical time")
     axes[1].legend()
