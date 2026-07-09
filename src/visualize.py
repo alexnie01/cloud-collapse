@@ -83,11 +83,12 @@ def tiered_radii(
     return star_radius, planet_radius
 
 
-def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
+def animate(store_path: str, fps: int = 30, export: str | None = None, view_radius_factor: float | None = None) -> None:
     """PyVista GPU-backed 3D animation with lazy per-frame Zarr reads and on-screen physical time.
 
     export=None opens an interactive window; otherwise renders off-screen straight to a movie
-    file (extension picks the codec, e.g. .mp4 or .gif).
+    file (extension picks the codec, e.g. .mp4 or .gif). view_radius_factor overrides the
+    display box size (see below) independently of the run's own escape_radius_factor.
     """
     root = open_store(store_path)
     n_frames = root["positions"].shape[0]
@@ -95,10 +96,14 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     frame_stride = int(root.attrs["frame_stride"])
     L_diag = root["diagnostics"]["angular_momentum"]
 
-    # Fixed system size (escape_radius from the run params), not derived from where
-    # points actually end up -- an escaped particle coasting outward would otherwise
-    # balloon the box each run, shrinking the bound core to a speck.
-    R = float(root.attrs["escape_radius_factor"]) * float(root.attrs["cloud_r_max"])
+    # Fixed system size, not derived from where points actually end up -- an escaped
+    # particle coasting outward would otherwise balloon the box each run, shrinking the
+    # bound core to a speck. Defaults to escape_radius_factor, but that's a physics
+    # knob (how far something coasts before it stops being tracked) that's often set
+    # much larger than where the actual collapse/disk action is -- view_radius_factor
+    # lets the display zoom be picked independently of it.
+    zoom_factor = view_radius_factor if view_radius_factor is not None else float(root.attrs["escape_radius_factor"])
+    R = zoom_factor * float(root.attrs["cloud_r_max"])
     bounds = (-R, R, -R, R, -R, R)
     arrow_length = 0.5 * R
 
@@ -287,8 +292,12 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     plotter.close()
 
 
-def matplotlib_fallback(store_path: str) -> None:
-    """3D scatter animation via matplotlib, for machines without a working PyVista/VTK GPU path."""
+def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None) -> None:
+    """3D scatter animation via matplotlib, for machines without a working PyVista/VTK GPU path.
+
+    view_radius_factor overrides the display box size independently of the run's own
+    escape_radius_factor -- see animate()'s docstring for why.
+    """
     root = open_store(store_path)
     n_frames = root["positions"].shape[0]
     times = root["times"][:]
@@ -300,8 +309,9 @@ def matplotlib_fallback(store_path: str) -> None:
 
     frame0 = read_frame(root, 0)
 
-    # Fixed system size (escape_radius from the run params), matching the PyVista viewer.
-    R = float(root.attrs["escape_radius_factor"]) * float(root.attrs["cloud_r_max"])
+    # Fixed system size, matching the PyVista viewer (see animate() for the rationale).
+    zoom_factor = view_radius_factor if view_radius_factor is not None else float(root.attrs["escape_radius_factor"])
+    R = zoom_factor * float(root.attrs["cloud_r_max"])
     arrow_length = 0.5 * R
 
     # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
@@ -433,23 +443,28 @@ def plot_diagnostics(store_path: str) -> None:
 
 
 @app.command
-def show(name: str, fps: int = 30, export: str | None = None) -> None:
+def show(name: str, fps: int = 30, export: str | None = None, view_radius_factor: float | None = None) -> None:
     """Animate a trajectory with PyVista (GPU-backed).
 
     name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
     export: Movie output path, if given (e.g. outputs/<name>/<name>.mp4); omit for
         an interactive window instead.
+    view_radius_factor: Multiple of cloud_r_max to zoom the display box to, independent of
+        the run's own escape_radius_factor. Defaults to escape_radius_factor itself, which
+        is often much bigger than where the actual collapse/disk is happening -- pass a
+        smaller value (e.g. 3-5) to zoom in on that.
     """
-    animate(data_path(name), fps=fps, export=export)
+    animate(data_path(name), fps=fps, export=export, view_radius_factor=view_radius_factor)
 
 
 @app.command
-def fallback(name: str) -> None:
+def fallback(name: str, view_radius_factor: float | None = None) -> None:
     """Animate a trajectory with matplotlib (no VTK/GPU dependency).
 
     name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
+    view_radius_factor: Multiple of cloud_r_max to zoom the display box to -- see show().
     """
-    matplotlib_fallback(data_path(name))
+    matplotlib_fallback(data_path(name), view_radius_factor=view_radius_factor)
 
 
 @app.command

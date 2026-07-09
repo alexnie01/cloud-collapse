@@ -42,6 +42,7 @@ def main(
     interactive_view: bool = False,
     show_diagnostics: bool = False,
     config: str | None = None,
+    view_radius_factor: float | None = None,
 ) -> None:
     """Run simulate.py's physics, then visualize.py's renderer, back to back.
 
@@ -89,6 +90,10 @@ def main(
     fps: Movie frame rate (ignored with --interactive-view).
     interactive_view: Open a live PyVista window instead of exporting a movie.
     show_diagnostics: Also plot energy/angular-momentum diagnostics once rendering finishes.
+    view_radius_factor: Multiple of cloud_r_max to zoom the display box to, independent of
+        escape_radius_factor. Defaults to escape_radius_factor itself, which is often much
+        bigger than where the actual collapse/disk is happening -- pass a smaller value
+        (e.g. 3-5) to zoom in on that.
     """
     if config is not None:
         params = RunParams.from_toml(config)
@@ -128,11 +133,11 @@ def main(
     console.print(f"[green]Simulation done.[/green] Trajectory written to {store_path}")
 
     if interactive_view:
-        animate(store_path, fps=fps, export=None)
+        animate(store_path, fps=fps, export=None, view_radius_factor=view_radius_factor)
     else:
         movie_path = output_path(out)
         os.makedirs(os.path.dirname(movie_path), exist_ok=True)
-        animate(store_path, fps=fps, export=movie_path)
+        animate(store_path, fps=fps, export=movie_path, view_radius_factor=view_radius_factor)
         console.print(f"[green]Movie written to {movie_path}[/green]")
 
     if show_diagnostics:
