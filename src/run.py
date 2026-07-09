@@ -38,7 +38,7 @@ def main(
     seed: int = 0,
     out: str | None = None,
     interactive_params: bool = False,
-    fps: int = 30,
+    fps: int = 15,
     interactive_view: bool = False,
     show_diagnostics: bool = False,
     config: str | None = None,
