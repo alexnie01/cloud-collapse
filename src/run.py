@@ -5,7 +5,7 @@ import os
 import cyclopts
 from rich.console import Console
 
-from cloud_collapse.params import RunParams, out_name_from_toml, prompt_run_params
+from cloud_collapse.params import RunParams, out_name_from_toml, prompt_run_params, view_radius_factor_from_toml
 from cloud_collapse.paths import data_path, output_path
 from cloud_collapse.physics.integrate import run_simulation
 from visualize import animate, plot_diagnostics
@@ -93,11 +93,14 @@ def main(
     view_radius_factor: Multiple of cloud_r_max to zoom the display box to, independent of
         escape_radius_factor. Defaults to escape_radius_factor itself, which is often much
         bigger than where the actual collapse/disk is happening -- pass a smaller value
-        (e.g. 3-5) to zoom in on that.
+        (e.g. 3-5) to zoom in on that. May also be set in the config file; an explicit flag
+        still takes precedence over that.
     """
     if config is not None:
         params = RunParams.from_toml(config)
         out = out or out_name_from_toml(config)
+        if view_radius_factor is None:
+            view_radius_factor = view_radius_factor_from_toml(config)
     elif interactive_params:
         params = prompt_run_params()
     else:

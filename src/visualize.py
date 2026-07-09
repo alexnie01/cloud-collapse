@@ -10,6 +10,7 @@ from matplotlib.animation import FuncAnimation
 from rich.progress import Progress, track
 
 from cloud_collapse.io.trajectory_store import open_store, read_frame
+from cloud_collapse.params import view_radius_factor_from_toml
 from cloud_collapse.paths import data_path
 
 app = cyclopts.App(help="Stage 2: view a cloud-collapse Zarr trajectory.")
@@ -443,7 +444,13 @@ def plot_diagnostics(store_path: str) -> None:
 
 
 @app.command
-def show(name: str, fps: int = 30, export: str | None = None, view_radius_factor: float | None = None) -> None:
+def show(
+    name: str,
+    fps: int = 30,
+    export: str | None = None,
+    view_radius_factor: float | None = None,
+    config: str | None = None,
+) -> None:
     """Animate a trajectory with PyVista (GPU-backed).
 
     name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
@@ -452,18 +459,26 @@ def show(name: str, fps: int = 30, export: str | None = None, view_radius_factor
     view_radius_factor: Multiple of cloud_r_max to zoom the display box to, independent of
         the run's own escape_radius_factor. Defaults to escape_radius_factor itself, which
         is often much bigger than where the actual collapse/disk is happening -- pass a
-        smaller value (e.g. 3-5) to zoom in on that.
+        smaller value (e.g. 3-5) to zoom in on that. May also be set in the config file
+        used for the run; an explicit flag still takes precedence over that.
+    config: Path to the TOML run config (see configs/example.toml), read only for its
+        optional view_radius_factor field.
     """
+    if view_radius_factor is None and config is not None:
+        view_radius_factor = view_radius_factor_from_toml(config)
     animate(data_path(name), fps=fps, export=export, view_radius_factor=view_radius_factor)
 
 
 @app.command
-def fallback(name: str, view_radius_factor: float | None = None) -> None:
+def fallback(name: str, view_radius_factor: float | None = None, config: str | None = None) -> None:
     """Animate a trajectory with matplotlib (no VTK/GPU dependency).
 
     name: Run name -- reads data/<name>/<name>.zarr (written by simulate.py/run.py).
     view_radius_factor: Multiple of cloud_r_max to zoom the display box to -- see show().
+    config: Path to the TOML run config, read only for its optional view_radius_factor field.
     """
+    if view_radius_factor is None and config is not None:
+        view_radius_factor = view_radius_factor_from_toml(config)
     matplotlib_fallback(data_path(name), view_radius_factor=view_radius_factor)
 
 

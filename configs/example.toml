@@ -4,10 +4,16 @@
 #
 # When --config is given, it's used exclusively: individual CLI flags are ignored.
 
-# --- Run naming (not a physics param -- read separately from RunParams) ---
+# --- Run naming / display (not physics params -- read separately from RunParams) ---
 # Optional: sets the default --out (data/<out>/<out>.zarr, outputs/<out>/<out>.mp4).
 # An explicit --out flag on the command line still overrides this.
 out = "example"
+# Optional: zooms the display box (visualize.py show/fallback, run.py) to this multiple
+# of cloud_r_max, independent of escape_radius_factor below -- which is a physics knob
+# often set much larger than where the actual collapse/disk action is happening, so
+# using it for the display box too can leave the interesting region a tiny speck in
+# frame. An explicit --view-radius-factor flag still overrides this.
+view_radius_factor = 4.0
 
 # --- Required (no default) ---
 n_particles = 5000
