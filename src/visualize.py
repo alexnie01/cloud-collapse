@@ -94,8 +94,6 @@ def animate(store_path: str, fps: int = 30, export: str | None = None, view_radi
     root = open_store(store_path)
     n_frames = root["positions"].shape[0]
     times = root["times"][:]
-    frame_stride = int(root.attrs["frame_stride"])
-    L_diag = root["diagnostics"]["angular_momentum"]
 
     # Fixed system size, not derived from where points actually end up -- an escaped
     # particle coasting outward would otherwise balloon the box each run, shrinking the
@@ -106,7 +104,6 @@ def animate(store_path: str, fps: int = 30, export: str | None = None, view_radi
     zoom_factor = view_radius_factor if view_radius_factor is not None else float(root.attrs["escape_radius_factor"])
     R = zoom_factor * float(root.attrs["cloud_r_max"])
     bounds = (-R, R, -R, R, -R, R)
-    arrow_length = 0.5 * R
 
     # Baseline splat radius (world units) for an unmerged particle -- same formula PyVista
     # itself uses internally to convert point_size -> gaussian scale_factor for a scene of
@@ -183,25 +180,6 @@ def animate(store_path: str, fps: int = 30, export: str | None = None, view_radi
         color="white",
     )
 
-    # Angular momentum vector: read straight from the stored per-step diagnostics
-    # (already computed during the run over the whole system, escapees included) --
-    # never recomputed here from positions/velocities.
-    def L_direction(step_idx: int) -> np.ndarray:
-        L = L_diag[step_idx]
-        norm = np.linalg.norm(L)
-        return L / norm if norm > 0 else np.array([0.0, 0.0, 1.0])
-
-    def make_arrow(direction: np.ndarray) -> pv.PolyData:
-        # Narrower than pv.Arrow's defaults (shaft_radius=0.05, tip_radius=0.1) -- this is
-        # a reference vector, not something meant to visually compete with the particles.
-        return pv.Arrow(
-            start=(0.0, 0.0, 0.0), direction=direction, scale=arrow_length, shaft_radius=0.015, tip_radius=0.035
-        )
-
-    arrow_mesh = make_arrow(L_direction(0))
-    plotter.add_mesh(arrow_mesh, color="yellow", opacity=0.35)
-    plotter.add_text("yellow arrow = conserved angular momentum L", position="lower_left", font_size=10, color="yellow")
-
     plotter.show(auto_close=False, interactive_update=True)
     plotter.reset_camera(bounds=bounds)
 
@@ -218,8 +196,6 @@ def animate(store_path: str, fps: int = 30, export: str | None = None, view_radi
         star_cloud["radius"] = star_radius
         planet_cloud.points = frame.positions
         planet_cloud["radius"] = planet_radius
-        step_idx = frame_idx * frame_stride
-        arrow_mesh.points = make_arrow(L_direction(step_idx)).points
         label = f"t = {times[frame_idx]:.3f}   frame {frame_idx}/{n_frames - 1}"
         if paused:
             label += "   [PAUSED]"
@@ -302,8 +278,6 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
     root = open_store(store_path)
     n_frames = root["positions"].shape[0]
     times = root["times"][:]
-    frame_stride = int(root.attrs["frame_stride"])
-    L_diag = root["diagnostics"]["angular_momentum"]
 
     def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
         return 0.5 * masses * np.einsum("ij,ij->i", velocities, velocities)
@@ -313,7 +287,6 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
     # Fixed system size, matching the PyVista viewer (see animate() for the rationale).
     zoom_factor = view_radius_factor if view_radius_factor is not None else float(root.attrs["escape_radius_factor"])
     R = zoom_factor * float(root.attrs["cloud_r_max"])
-    arrow_length = 0.5 * R
 
     # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
     # same constant-density r ~ mass**(1/3) radius growth as the PyVista viewer.
@@ -327,11 +300,6 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
         mass_ratio = masses / particle_mass
         is_planet = mass_ratio >= _PLANET_MASS_RATIO
         return np.where(is_planet, base_size * mass_ratio ** (2.0 / 3.0), base_size)
-
-    def L_direction(step_idx: int) -> np.ndarray:
-        L = L_diag[step_idx]
-        norm = np.linalg.norm(L)
-        return L / norm if norm > 0 else np.array([0.0, 0.0, 1.0])
 
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
@@ -363,7 +331,6 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
         color="white",
     )
     title = ax.set_title(f"t = {times[0]:.3f}", color="white")
-    quiver = [ax.quiver(0, 0, 0, *(arrow_length * L_direction(0)), color="yellow", alpha=0.35, linewidth=1.0)]
     progress = Progress()
     progress_task = progress.add_task("Playing", total=n_frames)
     progress.start()
@@ -380,14 +347,10 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
         scatter.set_sizes(marker_sizes(frame.masses))
         scatter.set_alpha(0.6)  # set_color above resets alpha, so reapply every frame
         title.set_text(f"t = {times[frame_idx]:.3f}")
-        quiver[0].remove()
-        quiver[0] = ax.quiver(
-            0, 0, 0, *(arrow_length * L_direction(frame_idx * frame_stride)), color="yellow", alpha=0.35, linewidth=1.0
-        )
         progress.update(progress_task, advance=1)
         if frame_idx == n_frames - 1:
             progress.stop()
-        return scatter, title, quiver[0]
+        return scatter, title
 
     anim = FuncAnimation(fig, update, frames=n_frames, interval=1000 / 30, blit=False, repeat=False)
     fig._cloud_collapse_anim = anim  # keep a reference alive
