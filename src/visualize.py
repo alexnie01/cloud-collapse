@@ -84,7 +84,7 @@ def tiered_radii(
     return star_radius, planet_radius
 
 
-def animate(store_path: str, fps: int = 15, export: str | None = None, view_radius_factor: float | None = None) -> None:
+def animate(store_path: str, fps: int = 30, export: str | None = None, view_radius_factor: float | None = None) -> None:
     """PyVista GPU-backed 3D animation with lazy per-frame Zarr reads and on-screen physical time.
 
     export=None opens an interactive window; otherwise renders off-screen straight to a movie
@@ -111,7 +111,7 @@ def animate(store_path: str, fps: int = 15, export: str | None = None, view_radi
     # out as faint pinpricks, leaving accretion (tiered_radii/per_particle_radius) as the
     # dominant visual size cue.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    point_size = 2.0
+    point_size = 1.0
     base_radius = point_size * np.linalg.norm([2 * R, 2 * R, 2 * R]) / 1300
 
     def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
@@ -291,7 +291,7 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
     # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
     # same constant-density r ~ mass**(1/3) radius growth as the PyVista viewer.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    base_size = 1.0
+    base_size = 0.25
 
     def marker_sizes(masses: np.ndarray) -> np.ndarray:
         # matplotlib has no real lighting/shading model, so there's no "planet" look to
@@ -352,7 +352,7 @@ def matplotlib_fallback(store_path: str, view_radius_factor: float | None = None
             progress.stop()
         return scatter, title
 
-    anim = FuncAnimation(fig, update, frames=n_frames, interval=1000 / 15, blit=False, repeat=False)
+    anim = FuncAnimation(fig, update, frames=n_frames, interval=1000 / 30, blit=False, repeat=False)
     fig._cloud_collapse_anim = anim  # keep a reference alive
     plt.show()
 
@@ -409,7 +409,7 @@ def plot_diagnostics(store_path: str) -> None:
 @app.command
 def show(
     name: str,
-    fps: int = 15,
+    fps: int = 30,
     export: str | None = None,
     view_radius_factor: float | None = None,
     config: str | None = None,
