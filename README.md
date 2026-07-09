@@ -15,14 +15,16 @@ conserved, so it settles into a flattened, rotating disk.
 - **Gravity**: all-pairs softened Newtonian N-body, numba-parallel.
 - **Collisions**: uniform-grid neighbor search each step; pairs bounce with a configurable
   restitution, or merge (perfectly inelastic sticking/accretion) below a relative-velocity
-  threshold, conserving mass, momentum, and angular momentum through every merge.
+  threshold, conserving mass, momentum, and angular momentum through every merge. Merged
+  bodies visibly grow in the animation -- particles start as tiny points and become
+  larger, lit, yellow-shaded spheres once they've accreted enough mass.
 - **Escape handling**: particles that become unbound and leave the system stop being
   integrated (an ejected particle doesn't need gravity computed against it forever), and
   are frozen once they're unambiguously gone for good.
 - **Conservation diagnostics**: kinetic/potential energy and angular momentum are tracked
   as exact whole-system totals throughout a run, even as particles escape, freeze, or
   merge -- so you can verify the simulation is physically sound, not just that it looks
-  plausible.
+  plausible (`visualize.py diagnostics`).
 
 ## Setup
 
@@ -56,6 +58,15 @@ uv run src/run.py --config configs/my_run.toml --out my_run
 ```
 
 `--config` is used exclusively when given -- see `configs/example.toml` for every field,
-commented.
+commented. The config file can also set `out` (the run name) and `view_radius_factor`
+(see below), so a single file can fully determine a run without any extra flags.
+
+The animation's display box defaults to `escape_radius_factor * cloud_r_max`, which is
+often much larger than where the actual collapse/disk is happening (escape_radius_factor
+is a physics knob, not a display one). Pass `--view-radius-factor` to zoom independently:
+
+```bash
+uv run src/visualize.py show my_run --view-radius-factor 4
+```
 
 See `CLAUDE.md` for a closer look at the physics model and project layout.

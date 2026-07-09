@@ -1,0 +1,42 @@
+out = "accrete.disk.zoom"
+
+# --- Required (no default) ---
+n_particles = 4000
+restitution = 0.8       # collision restitution, normal component (0..1)
+v_min_normal = 0.01     # below this relative normal speed, collisions are forced elastic
+n_steps = 200000
+
+# --- Collisions / accretion ---
+stick_velocity = 0.1   # below this relative normal approach speed, particles merge instead
+                        # of bouncing (independent of v_min_normal, which only affects bounces)
+particle_radius = 0.01
+
+# --- Integration ---
+dt = 0.0025
+frame_stride = 200      # steps between recorded position/velocity frames
+seed = 0
+
+# --- Initial cloud shape ---
+# cloud_r_max is the hard truncation radius; cloud_sigma is the Gaussian scale used to
+# sample within it. Keep cloud_r_max within a couple x cloud_sigma or the truncation
+# dominates and the cloud ends up close to uniform-density rather than centrally
+# concentrated 
+cloud_sigma = 3.0
+cloud_r_max = 6.0
+thermal_sigma = 0.2     # per-axis random ("thermal") velocity spread
+omega = [0.0, -0.2, 0.2]  # seeded solid-body rotation (omega x r); compare its
+                          # contribution to kinetic energy against thermal_sigma's --
+                          # too small relative to thermal motion gives a dispersion-
+                          # supported "elliptical" collapse instead of a rotating disk.
+
+# --- Physics constants ---
+g_constant = 1.0
+softening = 0.05
+total_mass = 8.0
+
+# --- Escape / parking (multiples of cloud_r_max) ---
+escape_radius_factor = 9.0   # beyond this, an unbound particle stops feeling forces
+park_radius_factor = 10.0    # beyond this (and still unbound), it's frozen for good
+
+# --- Animation ---
+view_radius_factor = 1.0
