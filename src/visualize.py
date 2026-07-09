@@ -108,7 +108,7 @@ def animate(store_path: str, fps: int = 30, export: str | None = None) -> None:
     # out as faint pinpricks, leaving accretion (tiered_radii/per_particle_radius) as the
     # dominant visual size cue.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    point_size = 1
+    point_size = 0.5
     base_radius = point_size * np.linalg.norm([2 * R, 2 * R, 2 * R]) / 1300
 
     def per_particle_ke(velocities: np.ndarray, masses: np.ndarray) -> np.ndarray:
@@ -307,7 +307,7 @@ def matplotlib_fallback(store_path: str) -> None:
     # matplotlib's scatter `s` is marker *area*, so scale as mass**(2/3) to keep the
     # same constant-density r ~ mass**(1/3) radius growth as the PyVista viewer.
     particle_mass = float(root.attrs["total_mass"]) / float(root.attrs["n_particles"])
-    base_size = 0.25
+    base_size = 0.0625
 
     def marker_sizes(masses: np.ndarray) -> np.ndarray:
         # matplotlib has no real lighting/shading model, so there's no "planet" look to
